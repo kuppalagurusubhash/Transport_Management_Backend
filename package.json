@@ -1,0 +1,29 @@
+{
+  "name": "transport-management-backend",
+  "version": "1.0.0",
+  "description": "Backend API for Stone Transport Management System",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node --env-file=.env src/server.js",
+    "dev": "nodemon --watch src --watch .env --exec \"node --env-file=.env\" src/server.js",
+    "seed": "node --env-file=.env seed.js"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "hpp": "^0.2.3",
+    "jsonwebtoken": "^9.0.3",
+    "mongodb": "^7.4.0",
+    "mongoose": "^8.3.1",
+    "socket.io": "^4.8.3"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.0"
+  }
+}
