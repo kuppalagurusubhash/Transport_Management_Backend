@@ -1,4 +1,5 @@
 import { Trip } from '../models/Trip.js';
+import { whatsappService } from '../services/whatsapp.service.js';
 
 export const getTrips = async (req, res, next) => {
   try {
@@ -32,7 +33,21 @@ export const createTrip = async (req, res, next) => {
     const tripData = req.body;
     const newTrip = new Trip(tripData);
     await newTrip.save();
-    res.status(201).json(newTrip);
+
+    // Trigger driver WhatsApp notification if driver is assigned
+    let whatsappResult = null;
+    if (newTrip.driverId) {
+      try {
+        whatsappResult = await whatsappService.sendDriverTripNotification(newTrip);
+      } catch (waErr) {
+        console.error('[Trip Controller] WhatsApp notification dispatch failed:', waErr.message);
+      }
+    }
+
+    res.status(201).json({
+      ...newTrip.toObject(),
+      whatsappNotification: whatsappResult
+    });
   } catch (err) {
     next(err);
   }
@@ -40,13 +55,40 @@ export const createTrip = async (req, res, next) => {
 
 export const updateTrip = async (req, res, next) => {
   try {
+    const existingTrip = await Trip.findOne({ id: req.params.id });
     const trip = await Trip.findOneAndUpdate(
       { id: req.params.id },
       req.body,
       { new: true }
     );
+
+    // If driver was newly assigned or changed, dispatch notification
+    if (trip && trip.driverId && (!existingTrip || existingTrip.driverId !== trip.driverId)) {
+      whatsappService.sendDriverTripNotification(trip).catch(err => {
+        console.error('[Trip Controller] WhatsApp notification error on trip update:', err.message);
+      });
+    }
+
     res.status(200).json(trip);
   } catch (err) {
     next(err);
   }
 };
+
+export const notifyDriverWhatsApp = async (req, res, next) => {
+  try {
+    const trip = await Trip.findOne({ id: req.params.id });
+    if (!trip) {
+      return res.status(404).json({ success: false, message: 'Trip not found' });
+    }
+
+    const result = await whatsappService.sendDriverTripNotification(trip);
+    res.status(200).json({
+      success: result.success,
+      data: result
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+

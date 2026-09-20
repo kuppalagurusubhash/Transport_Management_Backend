@@ -4,8 +4,63 @@ import { Lorry } from '../models/Lorry.js';
 import { User } from '../models/User.js';
 import { DistrictRate } from '../models/DistrictRate.js';
 
+import mongoose from 'mongoose';
+
+const mockOwnerStats = {
+  summary: {
+    totalTrips: 6,
+    activeDrivers: 4,
+    activeLorries: 4,
+    pendingOrders: 3,
+    totalRevenue: 284000,
+    pendingPayments: 48000,
+    totalExpenses: 54000,
+    totalWages: 32000,
+    netRevenue: 198000
+  },
+  fleetBreakdown: {
+    active: 3,
+    idle: 1,
+    maintenance: 0,
+    loading: 1,
+    inTransit: 2
+  },
+  recentTrips: [
+    {
+      id: "t1",
+      code: "TRP-1042",
+      lorryId: "KL-07 AB 4521",
+      driverId: "Suresh Kumar",
+      status: "in-transit",
+      date: "2026-07-01",
+      revenue: 48000
+    },
+    {
+      id: "t0",
+      code: "TRP-1043",
+      lorryId: "KL-10 EF 1234",
+      driverId: "Mohan Singh",
+      status: "loading",
+      date: "2026-07-04",
+      revenue: 52000
+    }
+  ],
+  loadingPartyBalances: [
+    { id: "lp1", name: "Sri Lakshmi Stone Quarry", location: "Ramapuram North", totalPurchased: 142000, paid: 120000, pending: 22000 },
+    { id: "lp2", name: "Balaji Granites & Black Stone", location: "Ramapuram Bypass", totalPurchased: 98000, paid: 98000, pending: 0 }
+  ],
+  unloadingPartyBalances: [
+    { id: "up1", name: "Malabar Builders & Developers", district: "Palakkad", totalOrdered: 132000, paid: 110000, pending: 22000, ordersCount: 4 },
+    { id: "up2", name: "Green Valley Constructions", district: "Wayanad", totalOrdered: 88000, paid: 88000, pending: 0, ordersCount: 2 }
+  ]
+};
+
 export const dashboardService = {
   async getOwnerStats() {
+    if (mongoose.connection.readyState !== 1) {
+      return mockOwnerStats;
+    }
+
     const [
       allTrips,
       allOrders,

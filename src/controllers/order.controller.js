@@ -42,10 +42,14 @@ export const createOrder = async (req, res, next) => {
 
 export const updateOrderStatus = async (req, res, next) => {
   try {
-    const { status } = req.body;
+    const { status, amountPaid } = req.body;
+    const updateObj = {};
+    if (status !== undefined) updateObj.status = status;
+    if (amountPaid !== undefined) updateObj.amountPaid = amountPaid;
+
     const order = await Order.findOneAndUpdate(
       { id: req.params.id },
-      { status },
+      updateObj,
       { new: true }
     );
     res.status(200).json(order);

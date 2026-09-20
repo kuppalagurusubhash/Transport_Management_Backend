@@ -15,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 // Use ipv4first to help with Atlas SRV DNS resolution
 dns.setDefaultResultOrder('ipv4first');
+mongoose.set('bufferCommands', false); // Fail fast when disconnected
 
 const defaultStoneRates = [
   { id: 'sp1', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 17 },
@@ -183,7 +184,7 @@ export const connectDB = async () => {
     console.log(`MongoDB Connected: ${mongoose.connection.host}`);
     // Run the default setups once connected
     await ensureDefaultUsers();
-    await ensureDefaultStoneRates();
+    // await ensureDefaultStoneRates();
   });
 
   mongoose.connection.on('error', (err) => {

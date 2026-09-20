@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node --env-file=.env src/server.js",
     "dev": "nodemon --watch src --watch .env --exec \"node --env-file=.env\" src/server.js",
-    "seed": "node --env-file=.env seed.js"
+    "seed": "node --env-file=.env seed.js",
+    "clear-db": "node --env-file=.env clearDb.js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",
