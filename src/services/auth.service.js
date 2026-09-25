@@ -163,6 +163,12 @@ export const authService = {
 
     const user = new User(userData);
     await user.save();
+    try {
+      const { syncUserToEntityCollection } = await import('./entitySync.service.js');
+      await syncUserToEntityCollection(user);
+    } catch (syncErr) {
+      console.error('[Auth Service] Entity sync error:', syncErr.message);
+    }
 
     const accessToken = this.generateAccessToken(user._id, user.role, user.buyerRef, user.driverRef);
     const refreshToken = this.generateRefreshToken(user._id, user.role, user.buyerRef, user.driverRef);

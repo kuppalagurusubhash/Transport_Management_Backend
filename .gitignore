@@ -3,3 +3,5 @@ node_modules
 .env.*
 logs
 *.log
+public/documents/**/*.pdf
+!public/documents/**/.gitkeep

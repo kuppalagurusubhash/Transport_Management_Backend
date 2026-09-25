@@ -10,6 +10,9 @@ import authRoutes from './auth.routes.js';
 import dashboardRoutes from './dashboard.routes.js';
 import stoneRateRoutes from './stoneRate.routes.js';
 import districtRateRoutes from './districtRate.routes.js';
+import whatsappRoutes from './whatsapp.routes.js';
+import catalogRoutes from './catalog.routes.js';
+import pdfRoutes from './pdf.routes.js';
 
 const router = Router();
 
@@ -18,6 +21,15 @@ router.use('/auth', authRoutes);
 
 // Owner dashboard
 router.use('/dashboard', dashboardRoutes);
+
+// Stone Variety Catalog
+router.use('/catalog', catalogRoutes);
+
+// WhatsApp Webhook & Bot
+router.use('/whatsapp', whatsappRoutes);
+
+// PDF Trip Manifests & E-Way Bills
+router.use('/pdf', pdfRoutes);
 
 // Domain-specific routes
 router.use('/drivers', driverRoutes);

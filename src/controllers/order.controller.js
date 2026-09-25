@@ -1,5 +1,8 @@
 import { Order } from '../models/Order.js';
 import { Notification } from '../models/Notification.js';
+import { notifyOwnerOfNewOrder } from '../services/orderNotification.service.js';
+import { whatsappService } from '../services/whatsapp.service.js';
+import { buyerLedgerService } from '../services/buyerLedger.service.js';
 
 export const getOrders = async (req, res, next) => {
   try {
@@ -22,17 +25,17 @@ export const createOrder = async (req, res, next) => {
     const newOrder = new Order(orderData);
     await newOrder.save();
 
-    // Trigger Notification for new orders
-    const notif = new Notification({
-      id: `n-${Date.now()}`,
-      kind: 'order',
-      title: `New order · ${newOrder.code}`,
-      body: `Order placed for district: ${newOrder.district}`,
-      time: 'just now',
-      read: false,
-      orderId: newOrder.id
+    // Trigger in-app WebSocket notification & WhatsApp Alert to Owner before assigning lorry
+    notifyOwnerOfNewOrder(newOrder).catch(err => {
+      console.error('[Order Controller] notifyOwnerOfNewOrder error:', err.message);
     });
-    await notif.save();
+
+    // Update buyer's financial ledger immediately
+    if (newOrder.unloadingPartyId) {
+      buyerLedgerService.calculateBuyerLedger(newOrder.unloadingPartyId).catch(err => {
+        console.warn('[Order Controller] Ledger sync error on order creation:', err.message);
+      });
+    }
 
     res.status(201).json(newOrder);
   } catch (err) {
@@ -52,8 +55,38 @@ export const updateOrderStatus = async (req, res, next) => {
       updateObj,
       { new: true }
     );
+
+    if (order) {
+      // Keep buyer financial ledger updated
+      if (order.unloadingPartyId) {
+        buyerLedgerService.calculateBuyerLedger(order.unloadingPartyId).catch(err => {
+          console.warn('[Order Controller] Ledger sync error on order update:', err.message);
+        });
+      }
+
+      // If order was dispatched or confirmed, notify buyer if vehicle & driver are assigned
+      if (status === 'dispatched' || status === 'confirmed') {
+        const { Trip } = await import('../models/Trip.js');
+        const trip = await Trip.findOne({ 
+          $or: [
+            { orderId: order.id },
+            { orderIds: order.id },
+            { 'stops.orderId': order.id },
+            { unloadingPartyId: order.unloadingPartyId }
+          ] 
+        }).sort({ createdAt: -1 });
+
+        if (trip && (trip.driverId || trip.lorryId)) {
+          whatsappService.sendBuyerTripNotification(trip).catch(err => {
+            console.error('[Order Controller] WhatsApp buyer notification error:', err.message);
+          });
+        }
+      }
+    }
+
     res.status(200).json(order);
   } catch (err) {
     next(err);
   }
 };
+

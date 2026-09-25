@@ -1,45 +1,33 @@
 import { User } from '../models/User.js';
 import { Trip } from '../models/Trip.js';
+import { Order } from '../models/Order.js';
 import { DistrictRate } from '../models/DistrictRate.js';
+import { calculateBuyerFinancialsFromData } from '../services/buyerLedger.service.js';
 
-const mapUserToUnloadingParty = (user, allTrips = [], districtRates = []) => {
+const mapUserToUnloadingParty = (user, allTrips = [], allOrders = [], districtRates = []) => {
   if (!user || !user.buyerProfile) return null;
   const buyerId = user.buyerProfile.id;
   const buyerDistrict = user.buyerProfile.district;
   
-  let totalOrdered = 0;
-  let paid = 0;
-  let pending = 0;
-
-  for (const t of allTrips) {
-    if (t.unloadingPartyId === buyerId) {
-      const tripRevenue = t.stoneLines.reduce((sum, line) => {
-        const matchRate = districtRates.find(r => 
-          r.district === buyerDistrict &&
-          r.size === line.size &&
-          r.thickness === line.thickness &&
-          r.finish === line.finish
-        );
-        const rate = matchRate ? matchRate.ratePerSqft : line.ratePerSqft;
-        return sum + (line.sqftPerPiece * line.pieces * rate);
-      }, 0);
-      const tripPaid = t.amountPaid || 0;
-      const damage = t.damageDeduction || 0;
-
-      totalOrdered += tripRevenue;
-      paid += tripPaid;
-      pending += Math.max(0, tripRevenue - tripPaid - damage);
-    }
-  }
+  const fin = calculateBuyerFinancialsFromData({
+    buyerId,
+    buyerDistrict,
+    baseTotalOrdered: user.buyerProfile.totalOrdered || 0,
+    basePaid: user.buyerProfile.paid || 0,
+    allTrips,
+    allOrders,
+    districtRates
+  });
 
   return {
     _id: user._id,
     id: buyerId,
     name: user.name,
     district: buyerDistrict,
-    totalOrdered,
-    paid,
-    pending,
+    totalOrdered: fin.totalOrdered,
+    paid: fin.paid,
+    pending: fin.pending,
+    ordersCount: fin.ordersCount,
     supervisorId: user.buyerProfile.supervisorId,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt
@@ -54,12 +42,13 @@ export const getUnloadingParties = async (req, res, next) => {
     } else if (req.user && req.user.role === 'buyer') {
       filter["buyerProfile.id"] = req.user.buyerRef;
     }
-    const [users, allTrips, districtRates] = await Promise.all([
+    const [users, allTrips, allOrders, districtRates] = await Promise.all([
       User.find(filter).populate('buyerProfile.supervisorId', 'username name role'),
       Trip.find({}),
+      Order.find({}),
       DistrictRate.find({})
     ]);
-    const data = users.map(user => mapUserToUnloadingParty(user, allTrips, districtRates)).filter(Boolean);
+    const data = users.map(user => mapUserToUnloadingParty(user, allTrips, allOrders, districtRates)).filter(Boolean);
     res.status(200).json(data);
   } catch (err) {
     next(err);

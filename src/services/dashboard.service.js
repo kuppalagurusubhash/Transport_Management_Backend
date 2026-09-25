@@ -3,6 +3,7 @@ import { Order } from '../models/Order.js';
 import { Lorry } from '../models/Lorry.js';
 import { User } from '../models/User.js';
 import { DistrictRate } from '../models/DistrictRate.js';
+import { calculateBuyerFinancialsFromData } from './buyerLedger.service.js';
 
 import mongoose from 'mongoose';
 
@@ -135,59 +136,62 @@ export const dashboardService = {
       if (!user.buyerProfile) return null;
       const buyerId = user.buyerProfile.id;
       const buyerDistrict = user.buyerProfile.district;
-      let totalOrdered = 0;
-      let paid = 0;
-      let pending = 0;
 
-      for (const t of allTrips) {
-        if (t.unloadingPartyId === buyerId) {
-          const tripRevenue = t.stoneLines.reduce((sum, line) => {
-            const matchRate = districtRates.find(r => 
-              r.district === buyerDistrict &&
-              r.size === line.size &&
-              r.thickness === line.thickness &&
-              r.finish === line.finish
-            );
-            const rate = matchRate ? matchRate.ratePerSqft : line.ratePerSqft;
-            return sum + (line.sqftPerPiece * line.pieces * rate);
-          }, 0);
-          const tripPaid = t.amountPaid || 0;
-          const damage = t.damageDeduction || 0;
-
-          totalOrdered += tripRevenue;
-          paid += tripPaid;
-          pending += Math.max(0, tripRevenue - tripPaid - damage);
-        }
-      }
-
-      const ordersCount = allOrders.filter(o => o.unloadingPartyId === buyerId).length;
+      const fin = calculateBuyerFinancialsFromData({
+        buyerId,
+        buyerDistrict,
+        baseTotalOrdered: user.buyerProfile.totalOrdered || 0,
+        basePaid: user.buyerProfile.paid || 0,
+        allTrips,
+        allOrders,
+        districtRates
+      });
 
       return {
         id: buyerId,
         name: user.name,
         district: buyerDistrict,
-        totalOrdered,
-        paid,
-        pending,
-        ordersCount,
+        totalOrdered: fin.totalOrdered,
+        paid: fin.paid,
+        pending: fin.pending,
+        ordersCount: fin.ordersCount,
         supervisorId: user.buyerProfile.supervisorId
       };
     }).filter(Boolean);
 
-    // Revenue = sum of all stoneLine amounts across all non-loading trips using selling rates
+    // Revenue = sum of all stoneLine amounts across all non-loading trips using selling rates (supporting multi-drop stops)
     const totalRevenue = allTrips.reduce((sum, trip) => {
-      const buyer = buyerUsers.find(u => u.buyerProfile && u.buyerProfile.id === trip.unloadingPartyId);
-      const buyerDistrict = buyer ? buyer.buyerProfile.district : null;
-      const tripRevenue = trip.stoneLines.reduce((s, line) => {
-        const matchRate = districtRates.find(r => 
-          r.district === buyerDistrict &&
-          r.size === line.size &&
-          r.thickness === line.thickness &&
-          r.finish === line.finish
-        );
-        const rate = matchRate ? matchRate.ratePerSqft : line.ratePerSqft;
-        return s + (line.sqftPerPiece * line.pieces * rate);
-      }, 0);
+      let tripRevenue = 0;
+      if (Array.isArray(trip.stops) && trip.stops.length > 0) {
+        tripRevenue = trip.stops.reduce((sSum, stop) => {
+          if (Array.isArray(stop.stoneLines) && stop.stoneLines.length > 0) {
+            return sSum + stop.stoneLines.reduce((lSum, line) => {
+              const matchRate = districtRates.find(r => 
+                r.district?.toLowerCase() === (stop.district || 'palakkad').toLowerCase() &&
+                r.size === line.size &&
+                r.thickness === line.thickness &&
+                r.finish === line.finish
+              );
+              const rate = matchRate ? matchRate.ratePerSqft : (line.ratePerSqft || 40);
+              return lSum + ((Number(line.sqftPerPiece) || 4) * (Number(line.pieces) || 0) * rate);
+            }, 0);
+          }
+          return sSum + (stop.expectedAmount || 0);
+        }, 0);
+      } else {
+        const buyer = buyerUsers.find(u => u.buyerProfile && u.buyerProfile.id === trip.unloadingPartyId);
+        const buyerDistrict = buyer ? buyer.buyerProfile.district : null;
+        tripRevenue = (trip.stoneLines || []).reduce((s, line) => {
+          const matchRate = districtRates.find(r => 
+            r.district?.toLowerCase() === (buyerDistrict || 'palakkad').toLowerCase() &&
+            r.size === line.size &&
+            r.thickness === line.thickness &&
+            r.finish === line.finish
+          );
+          const rate = matchRate ? matchRate.ratePerSqft : (line.ratePerSqft || 40);
+          return s + ((Number(line.sqftPerPiece) || 4) * (Number(line.pieces) || 0) * rate);
+        }, 0);
+      }
       return sum + tripRevenue;
     }, 0);
 
@@ -333,37 +337,26 @@ export const dashboardService = {
       throw new Error(`Buyer specification with id '${buyerId}' not found`);
     }
 
-    let totalOrdered = 0;
-    let paid = 0;
-    let pending = 0;
-
-    for (const t of trips) {
-      const tripRevenue = t.stoneLines.reduce((sum, line) => {
-        const matchRate = districtRates.find(r => 
-          r.district === buyerUser.buyerProfile.district &&
-          r.size === line.size &&
-          r.thickness === line.thickness &&
-          r.finish === line.finish
-        );
-        const rate = matchRate ? matchRate.ratePerSqft : line.ratePerSqft;
-        return sum + (line.sqftPerPiece * line.pieces * rate);
-      }, 0);
-      const tripPaid = t.amountPaid || 0;
-      const damage = t.damageDeduction || 0;
-
-      totalOrdered += tripRevenue;
-      paid += tripPaid;
-      pending += Math.max(0, tripRevenue - tripPaid - damage);
-    }
+    const fin = calculateBuyerFinancialsFromData({
+      buyerId,
+      buyerDistrict: buyerUser.buyerProfile.district,
+      baseTotalOrdered: buyerUser.buyerProfile.totalOrdered || 0,
+      basePaid: buyerUser.buyerProfile.paid || 0,
+      allTrips: trips,
+      allOrders: orders,
+      districtRates
+    });
 
     return {
       buyer: {
         id: buyerUser.buyerProfile.id,
         name: buyerUser.name,
         district: buyerUser.buyerProfile.district,
-        totalOrdered,
-        paid,
-        pending
+        totalOrdered: fin.totalOrdered,
+        paid: fin.paid,
+        pending: fin.pending,
+        totalDamage: fin.totalDamage,
+        ordersCount: fin.ordersCount
       },
       orders,
       trips

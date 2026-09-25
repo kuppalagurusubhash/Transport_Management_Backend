@@ -4,6 +4,7 @@ import app from './app.js';
 import { connectDB } from './config/db.js';
 import { initSocketHandlers } from './sockets/socket.handler.js';
 import { printStartupBanner } from './middlewares/logger.js';
+import { whatsappPollerService } from './services/whatsappPoller.service.js';
 
 const PORT = process.env.PORT || 5000;
 
@@ -23,6 +24,9 @@ initSocketHandlers(io);
 
 // Connect to MongoDB then start server
 connectDB();
+
+// Start real-time WhatsApp message polling (for local development without public tunnels)
+whatsappPollerService.start();
 
 httpServer.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

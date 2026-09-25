@@ -9,6 +9,7 @@ import { Order } from '../models/Order.js';
 import { Trip } from '../models/Trip.js';
 import { Lorry } from '../models/Lorry.js';
 import { Notification } from '../models/Notification.js';
+import { DistrictRate } from '../models/DistrictRate.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -38,6 +39,63 @@ const ensureDefaultStoneRates = async () => {
     }
   } catch (err) {
     console.error(`[Database Seed] Error seeding default stone rates: ${err.message}`);
+  }
+};
+
+const defaultDistrictRates = [
+  // Palakkad
+  { id: 'dr_plk_1', district: 'Palakkad', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 38 },
+  { id: 'dr_plk_2', district: 'Palakkad', size: '2x2', thickness: '40mm', finish: 'polish', ratePerSqft: 42 },
+  { id: 'dr_plk_3', district: 'Palakkad', size: '2x2', thickness: '50mm', finish: 'polish', ratePerSqft: 40 },
+  { id: 'dr_plk_4', district: 'Palakkad', size: '3x3', thickness: '30mm', finish: 'rough', ratePerSqft: 40 },
+  { id: 'dr_plk_5', district: 'Palakkad', size: '3x3', thickness: '40mm', finish: 'polish', ratePerSqft: 45 },
+  { id: 'dr_plk_6', district: 'Palakkad', size: '3x3', thickness: '50mm', finish: 'rough', ratePerSqft: 42 },
+
+  // Wayanad
+  { id: 'dr_wyd_1', district: 'Wayanad', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 42 },
+  { id: 'dr_wyd_2', district: 'Wayanad', size: '2x2', thickness: '40mm', finish: 'polish', ratePerSqft: 47 },
+  { id: 'dr_wyd_3', district: 'Wayanad', size: '2x2', thickness: '50mm', finish: 'polish', ratePerSqft: 48 },
+  { id: 'dr_wyd_4', district: 'Wayanad', size: '3x3', thickness: '30mm', finish: 'rough', ratePerSqft: 45 },
+  { id: 'dr_wyd_5', district: 'Wayanad', size: '3x3', thickness: '40mm', finish: 'polish', ratePerSqft: 50 },
+  { id: 'dr_wyd_6', district: 'Wayanad', size: '3x3', thickness: '50mm', finish: 'rough', ratePerSqft: 46 },
+
+  // Kannur
+  { id: 'dr_knr_1', district: 'Kannur', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 44 },
+  { id: 'dr_knr_2', district: 'Kannur', size: '2x2', thickness: '40mm', finish: 'polish', ratePerSqft: 48 },
+  { id: 'dr_knr_3', district: 'Kannur', size: '2x2', thickness: '50mm', finish: 'polish', ratePerSqft: 50 },
+  { id: 'dr_knr_4', district: 'Kannur', size: '3x3', thickness: '30mm', finish: 'rough', ratePerSqft: 47 },
+  { id: 'dr_knr_5', district: 'Kannur', size: '3x3', thickness: '40mm', finish: 'polish', ratePerSqft: 52 },
+  { id: 'dr_knr_6', district: 'Kannur', size: '3x3', thickness: '50mm', finish: 'rough', ratePerSqft: 49 },
+
+  // Thrissur
+  { id: 'dr_tsr_1', district: 'Thrissur', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 39 },
+  { id: 'dr_tsr_2', district: 'Thrissur', size: '2x2', thickness: '40mm', finish: 'polish', ratePerSqft: 43 },
+  { id: 'dr_tsr_3', district: 'Thrissur', size: '2x2', thickness: '50mm', finish: 'polish', ratePerSqft: 42 },
+  { id: 'dr_tsr_4', district: 'Thrissur', size: '3x3', thickness: '30mm', finish: 'rough', ratePerSqft: 41 },
+  { id: 'dr_tsr_5', district: 'Thrissur', size: '3x3', thickness: '40mm', finish: 'polish', ratePerSqft: 46 },
+  { id: 'dr_tsr_6', district: 'Thrissur', size: '3x3', thickness: '50mm', finish: 'rough', ratePerSqft: 43 },
+
+  // Ernakulam
+  { id: 'dr_ekm_1', district: 'Ernakulam', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 41 },
+  { id: 'dr_ekm_2', district: 'Ernakulam', size: '2x2', thickness: '40mm', finish: 'polish', ratePerSqft: 45 },
+  { id: 'dr_ekm_3', district: 'Ernakulam', size: '2x2', thickness: '50mm', finish: 'polish', ratePerSqft: 46 },
+  { id: 'dr_ekm_4', district: 'Ernakulam', size: '3x3', thickness: '30mm', finish: 'rough', ratePerSqft: 43 },
+  { id: 'dr_ekm_5', district: 'Ernakulam', size: '3x3', thickness: '40mm', finish: 'polish', ratePerSqft: 48 },
+  { id: 'dr_ekm_6', district: 'Ernakulam', size: '3x3', thickness: '50mm', finish: 'rough', ratePerSqft: 45 }
+];
+
+const ensureDefaultDistrictRates = async () => {
+  try {
+    const count = await DistrictRate.countDocuments();
+    if (count === 0) {
+      console.log('[Database Seed] Seeding default district rates...');
+      await DistrictRate.insertMany(defaultDistrictRates);
+      console.log('[Database Seed] Default district rates seeded successfully.');
+    } else {
+      console.log('[Database Seed] District rates already populated.');
+    }
+  } catch (err) {
+    console.error(`[Database Seed] Error seeding default district rates: ${err.message}`);
   }
 };
 
@@ -184,7 +242,14 @@ export const connectDB = async () => {
     console.log(`MongoDB Connected: ${mongoose.connection.host}`);
     // Run the default setups once connected
     await ensureDefaultUsers();
-    // await ensureDefaultStoneRates();
+    await ensureDefaultStoneRates();
+    await ensureDefaultDistrictRates();
+    try {
+      const { syncAllExistingUsersToEntityCollections } = await import('../services/entitySync.service.js');
+      await syncAllExistingUsersToEntityCollections();
+    } catch (err) {
+      console.error('[Database Seed/Sync] Error syncing entity collections:', err.message);
+    }
   });
 
   mongoose.connection.on('error', (err) => {

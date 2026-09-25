@@ -8,8 +8,31 @@ const stoneLineSchema = new mongoose.Schema({
   finish: { type: String, enum: ['polish', 'rough'], required: true },
   sqftPerPiece: { type: Number, required: true },
   pieces: { type: Number, required: true },
-  ratePerSqft: { type: Number, required: true }
+  ratePerSqft: { type: Number, required: true },
+  unloadingPartyId: { type: String, default: null },
+  orderId: { type: String, default: null },
+  destination: { type: String, default: '' }
 });
+
+const tripStopSchema = new mongoose.Schema({
+  stopNumber: { type: Number, default: 1 },
+  unloadingPartyId: { type: String, required: true },
+  orderId: { type: String, default: null },
+  buyerName: { type: String, default: '' },
+  buyerPhone: { type: String, default: '' },
+  district: { type: String, default: '' },
+  deliveryLocation: { type: String, default: '' },
+  stoneSummary: { type: String, default: '' },
+  stoneLines: [stoneLineSchema],
+  totalPieces: { type: Number, default: 0 },
+  totalSqft: { type: Number, default: 0 },
+  expectedAmount: { type: Number, default: 0 },
+  collectedCash: { type: Number, default: 0 },
+  collectedOnline: { type: Number, default: 0 },
+  status: { type: String, enum: ['pending', 'unloaded', 'skipped'], default: 'pending' },
+  unloadedAt: { type: Date, default: null },
+  notes: { type: String, default: '' }
+}, { _id: false });
 
 const workerPaymentSchema = new mongoose.Schema({
   id: { type: String, required: true },
@@ -40,10 +63,12 @@ const tripSchema = new mongoose.Schema({
   lorryId: { type: String, required: true },
   driverId: { type: String, required: true },
   origin: { type: String, required: true },
-  unloadingPartyId: { type: String, required: true },
+  unloadingPartyId: { type: String, default: '' },
+  unloadingPartyIds: [{ type: String }],
   status: { type: String, enum: ['loading', 'in-transit', 'delivered', 'paid'], default: 'loading' },
   date: { type: String, required: true },
   stoneLines: [stoneLineSchema],
+  stops: [tripStopSchema],
   workerPayments: [workerPaymentSchema],
   expenses: [expenseLineSchema],
   loadingPartyPayments: [loadingPartyPaymentSchema],
@@ -52,7 +77,8 @@ const tripSchema = new mongoose.Schema({
   partyToOwnerPhonePe: { type: Number, default: 0 },
   damagedPieces: { type: Number, default: 0 },
   damageDeduction: { type: Number, default: 0 },
-  orderId: { type: String, default: null }
+  orderId: { type: String, default: null },
+  orderIds: [{ type: String }]
 }, { timestamps: true });
 
 export const Trip = mongoose.model('Trip', tripSchema);

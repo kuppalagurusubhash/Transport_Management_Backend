@@ -68,5 +68,25 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
 
+// Automatically synchronize with drivers, loadingparties, and unloadingparties collections
+userSchema.post('save', async function (doc) {
+  try {
+    const { syncUserToEntityCollection } = await import('../services/entitySync.service.js');
+    await syncUserToEntityCollection(doc);
+  } catch (err) {
+    console.error('[User post-save sync error]:', err.message);
+  }
+});
+
+userSchema.post('findOneAndDelete', async function (doc) {
+  if (!doc) return;
+  try {
+    const { deleteUserFromEntityCollection } = await import('../services/entitySync.service.js');
+    await deleteUserFromEntityCollection(doc);
+  } catch (err) {
+    console.error('[User post-delete sync error]:', err.message);
+  }
+});
+
 export const User = mongoose.model('User', userSchema);
 

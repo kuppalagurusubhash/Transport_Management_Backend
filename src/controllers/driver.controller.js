@@ -135,11 +135,34 @@ export const updateDriver = async (req, res, next) => {
 
 export const deleteDriver = async (req, res, next) => {
   try {
-    const deleted = await User.findOneAndDelete({ role: 'driver', "driverProfile.id": req.params.id });
-    if (!deleted) {
-      return res.status(404).json({ message: 'Driver not found' });
+    const ADMIN_EMAIL = 'subhash.cropnow@gmail.com';
+    const requesterUsername = req.user?.username?.toLowerCase();
+    
+    if (!requesterUsername || requesterUsername !== ADMIN_EMAIL.toLowerCase()) {
+      return res.status(403).json({
+        success: false,
+        message: `Access denied: Only administrator (${ADMIN_EMAIL}) can delete driver accounts.`
+      });
     }
-    res.status(200).json({ success: true, message: 'Driver deleted' });
+
+    const userToDelete = await User.findOne({ role: 'driver', "driverProfile.id": req.params.id });
+    if (!userToDelete) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+
+    // Free up assigned lorry if any
+    const lorryId = userToDelete.driverProfile?.lorryId;
+    if (lorryId) {
+      try {
+        const { Lorry } = await import('../models/Lorry.js');
+        await Lorry.findOneAndUpdate({ id: lorryId }, { driverId: null, status: 'idle' });
+      } catch (lorryErr) {
+        console.warn('[deleteDriver] Could not unassign lorry:', lorryErr.message);
+      }
+    }
+
+    await User.findByIdAndDelete(userToDelete._id);
+    res.status(200).json({ success: true, message: 'Driver account deleted successfully' });
   } catch (err) {
     next(err);
   }
