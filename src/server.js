@@ -1,3 +1,4 @@
+import 'dotenv/config';
 import http from 'http';
 import { Server } from 'socket.io';
 import app from './app.js';
@@ -5,16 +6,25 @@ import { connectDB } from './config/db.js';
 import { initSocketHandlers } from './sockets/socket.handler.js';
 import { printStartupBanner } from './middlewares/logger.js';
 import { whatsappPollerService } from './services/whatsappPoller.service.js';
+import { validateEnv } from './utils/env-validator.util.js';
+
+// Validate environment on boot
+validateEnv();
 
 const PORT = process.env.PORT || 5000;
 
 // Create HTTP server from Express app
 const httpServer = http.createServer(app);
 
+// Allowed origins
+const allowedOrigins = process.env.FRONTEND_URL
+  ? process.env.FRONTEND_URL.split(',').map(s => s.trim())
+  : ['http://localhost:5173', 'http://localhost:3000'];
+
 // Attach socket.io to HTTP server
 const io = new Server(httpServer, {
   cors: {
-    origin: '*',
+    origin: process.env.NODE_ENV === 'production' ? allowedOrigins : '*',
     methods: ['GET', 'POST']
   }
 });

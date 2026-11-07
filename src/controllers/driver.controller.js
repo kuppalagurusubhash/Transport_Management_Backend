@@ -135,13 +135,14 @@ export const updateDriver = async (req, res, next) => {
 
 export const deleteDriver = async (req, res, next) => {
   try {
-    const ADMIN_EMAIL = 'subhash.cropnow@gmail.com';
-    const requesterUsername = req.user?.username?.toLowerCase();
-    
-    if (!requesterUsername || requesterUsername !== ADMIN_EMAIL.toLowerCase()) {
+    const adminEmail = process.env.DEFAULT_OWNER_EMAIL || process.env.OWNER_EMAIL;
+    const isOwnerRole = req.user?.role === 'owner';
+    const isMatchingAdminEmail = adminEmail && req.user?.username?.toLowerCase() === adminEmail.toLowerCase();
+
+    if (!isOwnerRole && !isMatchingAdminEmail) {
       return res.status(403).json({
         success: false,
-        message: `Access denied: Only administrator (${ADMIN_EMAIL}) can delete driver accounts.`
+        message: 'Access denied: Only administrator / owner can delete driver accounts.'
       });
     }
 

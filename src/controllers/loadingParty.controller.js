@@ -81,7 +81,7 @@ export const createLoadingParty = async (req, res, next) => {
       if (!supervisor) {
         supervisor = new User({
           username: supervisorUsername,
-          password: 'password123', // default password
+          password: process.env.DEFAULT_USER_PASSWORD || 'ChangeMeImmediately!',
           role: 'loading_supervisor',
           name: supervisorUsername.charAt(0).toUpperCase() + supervisorUsername.slice(1) + ' Supervisor'
         });

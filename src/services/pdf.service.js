@@ -91,11 +91,14 @@ export const pdfService = {
 
       // --- 2. DOCUMENT TITLE BADGE ---
       doc.moveDown(1.5);
+      const isEnded = ['completed', 'closed', 'delivered', 'returned_to_base'].includes(trip.status) || Boolean(trip.finalAudit);
       const titleY = 105;
-      doc.rect(35, titleY, 525, 24).fill('#F0FDF4').stroke('#86EFAC');
-      doc.fillColor('#166534').fontSize(11).font('Helvetica-Bold')
-        .text('MASTER TRIP MANIFEST & DRIVER ROUTE DISPATCH SHEET', 45, titleY + 6);
-      doc.fillColor('#15803D').fontSize(9).font('Helvetica')
+      const titleBg = isEnded ? '#ECFDF5' : '#F0FDF4';
+      const titleBorder = isEnded ? '#10B981' : '#86EFAC';
+      doc.rect(35, titleY, 525, 24).fill(titleBg).stroke(titleBorder);
+      doc.fillColor(isEnded ? '#065F46' : '#166534').fontSize(11).font('Helvetica-Bold')
+        .text(isEnded ? '🏁 MASTER TRIP MANIFEST & RECONCILED SETTLEMENT REPORT' : 'MASTER TRIP MANIFEST & DRIVER ROUTE DISPATCH SHEET', 45, titleY + 6);
+      doc.fillColor(isEnded ? '#047857' : '#15803D').fontSize(9).font('Helvetica')
         .text(`TRIP REF: ${tripCode}`, 420, titleY + 7, { align: 'right', width: 130 });
 
       // --- 3. METADATA GRID BOX ---
@@ -223,7 +226,41 @@ export const pdfService = {
         currentY += 32;
       }
 
-      // --- 6. DRIVER TRANSIT & UNLOADING INSTRUCTIONS ---
+      // --- 6. TRIP SETTLEMENT & DRIVER RECONCILIATION SUMMARY (WHEN COMPLETED) ---
+      if (isEnded || trip.finalAudit) {
+        if (currentY > 580) {
+          doc.addPage();
+          currentY = 40;
+        }
+
+        const audit = trip.finalAudit || {};
+        const grossRev = Number(audit.totalGrossRevenue || audit.stoneRevenue || 0);
+        const tripExp = Number(audit.totalTripExpenses || 0);
+        const netProf = Number(audit.netTripProfit || (grossRev - tripExp));
+        const cashHandover = Number(audit.driverCashHandedToOwner || 0);
+        const driverCashColl = Number(audit.driverCashCollected || 0);
+
+        doc.rect(35, currentY, 525, 75).fill('#F0FDF4').stroke('#86EFAC');
+        doc.fillColor('#166534').fontSize(10).font('Helvetica-Bold')
+          .text('🏁 FINAL TRIP DELIVERY AUDIT & FINANCIAL SETTLEMENT SUMMARY', 45, currentY + 8);
+
+        doc.fontSize(8.5).font('Helvetica')
+          .fillColor('#1E293B')
+          .text(`Gross Revenue: ₹${grossRev.toLocaleString('en-IN')}`, 45, currentY + 26)
+          .text(`Total Trip Expenses: ₹${tripExp.toLocaleString('en-IN')}`, 45, currentY + 42)
+          .font('Helvetica-Bold').fillColor('#047857')
+          .text(`Net Trip Profit: ₹${netProf.toLocaleString('en-IN')}`, 45, currentY + 58);
+
+        doc.font('Helvetica').fillColor('#1E293B')
+          .text(`Cash Collected by Driver: ₹${driverCashColl.toLocaleString('en-IN')}`, 290, currentY + 26)
+          .text(`Driver Settlement Mode: ${audit.driverSettlementType || 'Settled'}`, 290, currentY + 42)
+          .font('Helvetica-Bold').fillColor('#1D4ED8')
+          .text(`Cash Handed Over to Owner: ₹${cashHandover.toLocaleString('en-IN')}`, 290, currentY + 58);
+
+        currentY += 85;
+      }
+
+      // --- 7. DRIVER TRANSIT & UNLOADING INSTRUCTIONS ---
       if (currentY > 670) {
         doc.addPage();
         currentY = 40;
@@ -239,15 +276,20 @@ export const pdfService = {
 
       currentY += 70;
 
-      // --- 7. SIGNATURE BLOCK ---
+      // --- 8. SIGNATURE BLOCK ---
+      if (currentY > 710) {
+        doc.addPage();
+        currentY = 40;
+      }
+
       doc.rect(35, currentY, 250, 50).stroke('#CBD5E1');
-      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text('LOADING YARD SUPERVISOR', 45, currentY + 8);
-      doc.font('Helvetica').text('Verified count, sizes & dispatch authorization:', 45, currentY + 18);
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text(isEnded ? 'OWNER / SETTLEMENT AUDITOR' : 'LOADING YARD SUPERVISOR', 45, currentY + 8);
+      doc.font('Helvetica').text(isEnded ? 'Trip reconciled, accounts settled & authorized:' : 'Verified count, sizes & dispatch authorization:', 45, currentY + 18);
       doc.text('Signature: _______________________ Date: ________', 45, currentY + 36);
 
       doc.rect(310, currentY, 250, 50).stroke('#CBD5E1');
-      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text('DRIVER ACKNOWLEDGMENT', 320, currentY + 8);
-      doc.font('Helvetica').text('I acknowledge receipt of full stone count in sound condition:', 320, currentY + 18);
+      doc.fillColor('#475569').fontSize(8).font('Helvetica-Bold').text(isEnded ? 'DRIVER FINAL HANDOVER SIGNATURE' : 'DRIVER ACKNOWLEDGMENT', 320, currentY + 8);
+      doc.font('Helvetica').text(isEnded ? 'I certify delivery completion & cash handed over:' : 'I acknowledge receipt of full stone count in sound condition:', 320, currentY + 18);
       doc.text('Signature: _______________________ Date: ________', 320, currentY + 36);
 
       // Footer

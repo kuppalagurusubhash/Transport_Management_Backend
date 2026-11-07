@@ -117,6 +117,7 @@ const ensureMockDataSeeded = async () => {
         ].filter(Boolean));
 
         // 2. Seed drivers as Users with nested driverProfile
+        const defaultUserPassword = process.env.DEFAULT_USER_PASSWORD || 'password123';
         if (data.drivers) {
           for (const d of data.drivers) {
             const email = `${d.name.toLowerCase().replace(/\s+/g, '')}@transia.com`;
@@ -124,7 +125,7 @@ const ensureMockDataSeeded = async () => {
             if (!existing) {
               const user = new User({
                 username: email,
-                password: 'password123',
+                password: defaultUserPassword,
                 role: 'driver',
                 name: d.name,
                 phone: d.phone || '',
@@ -150,7 +151,7 @@ const ensureMockDataSeeded = async () => {
             if (!existing) {
               const user = new User({
                 username,
-                password: 'password123',
+                password: defaultUserPassword,
                 role: 'buyer',
                 name: up.name,
                 phone: '',
@@ -176,7 +177,7 @@ const ensureMockDataSeeded = async () => {
             if (!existing) {
               const user = new User({
                 username,
-                password: 'password123',
+                password: defaultUserPassword,
                 role: 'loading_supervisor',
                 name: `${lp.name} Supervisor`,
                 phone: '',
@@ -208,16 +209,23 @@ const ensureMockDataSeeded = async () => {
 
 const ensureDefaultUsers = async () => {
   try {
-    // 1. Ensure Owner User
-    const ownerEmail = 'subhash.cropnow@gmail.com';
+    // Ensure Owner User from environment configuration (never hardcode in production)
+    const ownerEmail = process.env.DEFAULT_OWNER_EMAIL;
+    const ownerPassword = process.env.DEFAULT_OWNER_PASSWORD;
+
+    if (!ownerEmail || !ownerPassword) {
+      console.log('[Database Seed] No DEFAULT_OWNER_EMAIL or DEFAULT_OWNER_PASSWORD configured. Skipping owner user creation.');
+      return;
+    }
+
     const existingOwner = await User.findOne({ username: ownerEmail });
     if (!existingOwner) {
-      console.log(`[Database Seed] Creating default owner user: ${ownerEmail}`);
+      console.log(`[Database Seed] Creating default owner user from environment configuration: ${ownerEmail}`);
       const owner = new User({
         username: ownerEmail,
-        password: '12345',
+        password: ownerPassword,
         role: 'owner',
-        name: 'Subhash Owner'
+        name: process.env.DEFAULT_OWNER_NAME || 'Owner'
       });
       await owner.save();
       console.log(`[Database Seed] Default owner user created successfully.`);

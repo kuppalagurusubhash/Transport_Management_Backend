@@ -5,7 +5,7 @@
   "main": "src/server.js",
   "type": "module",
   "scripts": {
-    "start": "node --env-file=.env src/server.js",
+    "start": "node src/server.js",
     "dev": "nodemon --watch src --watch .env --exec \"node --env-file=.env\" src/server.js",
     "seed": "node --env-file=.env seed.js",
     "clear-db": "node --env-file=.env clearDb.js"

@@ -76,7 +76,7 @@ export const createUnloadingParty = async (req, res, next) => {
     }
 
     const buyerUsername = req.body.username || req.body.email || id.toLowerCase();
-    const buyerPassword = req.body.password || 'password123';
+    const buyerPassword = req.body.password || process.env.DEFAULT_USER_PASSWORD || 'ChangeMeImmediately!';
 
     let user = await User.findOne({ username: buyerUsername });
     if (!user) {

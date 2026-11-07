@@ -13,6 +13,15 @@ import districtRateRoutes from './districtRate.routes.js';
 import whatsappRoutes from './whatsapp.routes.js';
 import catalogRoutes from './catalog.routes.js';
 import pdfRoutes from './pdf.routes.js';
+import paymentRoutes from './payment.routes.js';
+import {
+  getPartyLedger,
+  getPartyStatement,
+  getPartyOutstanding,
+  downloadPartyStatementPDF,
+  viewPartyStatementPDF
+} from '../controllers/ledger.controller.js';
+import { optionalAuthenticate } from '../middlewares/auth.middleware.js';
 
 const router = Router();
 
@@ -30,6 +39,16 @@ router.use('/whatsapp', whatsappRoutes);
 
 // PDF Trip Manifests & E-Way Bills
 router.use('/pdf', pdfRoutes);
+
+// Payments & Financial Ledger
+router.use('/payments', paymentRoutes);
+
+// Unified Party Ledger & Statement Endpoints
+router.get('/parties/:partyId/ledger', optionalAuthenticate, getPartyLedger);
+router.get('/parties/:partyId/statement', optionalAuthenticate, getPartyStatement);
+router.get('/parties/:partyId/outstanding', optionalAuthenticate, getPartyOutstanding);
+router.get('/parties/:partyId/statement.pdf', optionalAuthenticate, downloadPartyStatementPDF);
+router.get('/parties/:partyId/statement-view.pdf', optionalAuthenticate, viewPartyStatementPDF);
 
 // Domain-specific routes
 router.use('/drivers', driverRoutes);

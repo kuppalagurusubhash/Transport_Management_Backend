@@ -5,26 +5,35 @@ import { User } from '../models/User.js';
 
 dotenv.config({ override: true });
 
-const JWT_SECRET = process.env.JWT_ACCESS_SECRET || 'supersecretaccesskey';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'supersecretrefreshkey';
+const getJwtSecret = () => {
+  const secret = process.env.JWT_ACCESS_SECRET || (process.env.NODE_ENV !== 'production' ? 'supersecretaccesskey' : null);
+  if (!secret) throw new Error('JWT_ACCESS_SECRET environment variable is missing');
+  return secret;
+};
+
+const getJwtRefreshSecret = () => {
+  const secret = process.env.JWT_REFRESH_SECRET || (process.env.NODE_ENV !== 'production' ? 'supersecretrefreshkey' : null);
+  if (!secret) throw new Error('JWT_REFRESH_SECRET environment variable is missing');
+  return secret;
+};
 
 export const authService = {
   generateAccessToken(userId, role, buyerRef = null, driverRef = null) {
-    return jwt.sign({ id: userId, role, buyerRef, driverRef, type: 'access' }, JWT_SECRET, { expiresIn: '1h' });
+    return jwt.sign({ id: userId, role, buyerRef, driverRef, type: 'access' }, getJwtSecret(), { expiresIn: '1h' });
   },
 
   generateRefreshToken(userId, role, buyerRef = null, driverRef = null) {
-    return jwt.sign({ id: userId, role, buyerRef, driverRef, type: 'refresh' }, JWT_REFRESH_SECRET, { expiresIn: '7d' });
+    return jwt.sign({ id: userId, role, buyerRef, driverRef, type: 'refresh' }, getJwtRefreshSecret(), { expiresIn: '7d' });
   },
 
   verifyAccessToken(token) {
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, getJwtSecret());
     if (decoded.type !== 'access') throw new Error('Invalid token type');
     return decoded;
   },
 
   verifyRefreshToken(token) {
-    const decoded = jwt.verify(token, JWT_REFRESH_SECRET);
+    const decoded = jwt.verify(token, getJwtRefreshSecret());
     if (decoded.type !== 'refresh') throw new Error('Invalid token type');
     return decoded;
   },
@@ -183,12 +192,16 @@ export const authService = {
 
   async login(username, password) {
     if (mongoose.connection.readyState !== 1) {
-      console.warn('[Auth Service] MongoDB is disconnected, executing offline fallback verification...');
+      if (process.env.NODE_ENV === 'production') {
+        throw new Error('Database temporarily unavailable. Please retry shortly.');
+      }
+      console.warn('[Auth Service] MongoDB is disconnected, executing offline fallback verification (development only)...');
       const u = (username || '').toLowerCase().trim();
-      if (u === 'subhash.cropnow@gmail.com' || u === 'owner') {
+      const defaultOwner = (process.env.DEFAULT_OWNER_EMAIL || 'owner@transia.com').toLowerCase();
+      if (u === defaultOwner || u === 'owner') {
         const mockId = '668600000000000000000001';
         return {
-          user: { _id: mockId, username: 'subhash.cropnow@gmail.com', name: 'Subhash Owner', role: 'owner' },
+          user: { _id: mockId, username: defaultOwner, name: process.env.DEFAULT_OWNER_NAME || 'Owner', role: 'owner' },
           accessToken: this.generateAccessToken(mockId, 'owner'),
           refreshToken: this.generateRefreshToken(mockId, 'owner')
         };

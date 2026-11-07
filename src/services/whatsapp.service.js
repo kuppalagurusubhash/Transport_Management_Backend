@@ -6,6 +6,8 @@ import { UnloadingParty } from '../models/UnloadingParty.js';
 import { Driver } from '../models/Driver.js';
 import { pdfService } from './pdf.service.js';
 import mongoose from 'mongoose';
+import fs from 'fs';
+import path from 'path';
 
 /**
  * Normalizes phone number to E.164 format.
@@ -617,8 +619,9 @@ export const whatsappService = {
    * @param {string} documentUrl 
    * @param {string} filename 
    * @param {string} caption 
+   * @param {Buffer|string} fileBufferOrBase64
    */
-  async sendDocumentMessage(toPhone, documentUrl, filename, caption = '') {
+  async sendDocumentMessage(toPhone, documentUrl, filename, caption = '', fileBufferOrBase64 = null) {
     const normalizedPhone = normalizePhoneNumber(toPhone);
     if (!normalizedPhone) {
       return { success: false, error: 'Invalid phone number' };
@@ -635,12 +638,35 @@ export const whatsappService = {
           throw new Error('UltraMsg credentials (ULTRAMSG_INSTANCE_ID, ULTRAMSG_TOKEN) are missing in .env');
         }
 
+        let docPayload = documentUrl;
+        if (fileBufferOrBase64) {
+          if (Buffer.isBuffer(fileBufferOrBase64)) {
+            docPayload = `data:application/pdf;base64,${fileBufferOrBase64.toString('base64')}`;
+          } else if (typeof fileBufferOrBase64 === 'string' && fileBufferOrBase64.length > 50) {
+            docPayload = fileBufferOrBase64.startsWith('data:') ? fileBufferOrBase64 : `data:application/pdf;base64,${fileBufferOrBase64}`;
+          }
+        } else if (documentUrl && (documentUrl.includes('localhost') || documentUrl.includes('127.0.0.1'))) {
+          // If local URL, read directly from public folder to pass base64 to UltraMsg
+          try {
+            const relMatch = documentUrl.match(/\/documents\/(.+)$/);
+            if (relMatch) {
+              const localDocPath = path.join(process.cwd(), 'public/documents', relMatch[1]);
+              if (fs.existsSync(localDocPath)) {
+                const fBuf = fs.readFileSync(localDocPath);
+                docPayload = `data:application/pdf;base64,${fBuf.toString('base64')}`;
+              }
+            }
+          } catch (readErr) {
+            console.warn('[WhatsApp Service] Could not convert local document to base64:', readErr.message);
+          }
+        }
+
         const url = `https://api.ultramsg.com/${instanceId}/messages/document`;
         const params = new URLSearchParams({
           token,
           to: normalizedPhone,
           filename: filename || 'document.pdf',
-          document: documentUrl,
+          document: docPayload,
           caption: caption || ''
         });
 
@@ -977,6 +1003,315 @@ export const whatsappService = {
       messageText,
       result
     };
+  },
+
+  /**
+   * Generates and dispatches the whole Trip Master Manifest & Settlement PDF document
+   * to BOTH the Driver and the Transport Owner when the trip has ended.
+   * @param {Object|string} tripOrId
+   */
+  async sendTripEndedReportToDriverAndOwner(tripOrId) {
+    let trip = tripOrId;
+    if (typeof tripOrId === 'string') {
+      trip = await Trip.findOne({ id: tripOrId });
+    }
+    if (!trip) {
+      console.warn(`[WhatsApp Service] Trip not found for trip completion notification: ${tripOrId}`);
+      return { success: false, reason: 'Trip not found' };
+    }
+
+    // 1. Generate the whole trip PDF document
+    const manifest = await pdfService.generateTripManifestPDF(trip);
+
+    // 2. Resolve Driver
+    let driver = null;
+    if (trip.driverId) {
+      driver = await User.findOne({
+        role: 'driver',
+        $or: [
+          { 'driverProfile.id': trip.driverId },
+          { _id: mongoose.isValidObjectId(trip.driverId) ? trip.driverId : null },
+          { username: trip.driverId }
+        ].filter(Boolean)
+      }) || await Driver.findOne({ id: trip.driverId });
+    }
+
+    // 3. Resolve Owner
+    const owner = await User.findOne({ role: 'owner' });
+    const ownerPhone = process.env.OWNER_ALERT_PHONE || process.env.OWNER_PHONE || owner?.phone || '7893310812';
+    const normalizedOwnerPhone = normalizePhoneNumber(ownerPhone);
+
+    // Aggregate metrics for WhatsApp captions
+    const tripCode = trip.code || trip.id || 'TRIP';
+    const lorryPlate = trip.lorryId || 'Assigned Lorry';
+    const date = trip.date || new Date().toISOString().slice(0, 10);
+    const origin = trip.origin || 'Quarry Loading Point';
+
+    let totalPieces = 0;
+    if (Array.isArray(trip.loadingEntries) && trip.loadingEntries.length > 0) {
+      totalPieces = trip.loadingEntries.reduce((s, e) => s + (Number(e.pieces) || 0), 0);
+    } else if (Array.isArray(trip.stoneLines) && trip.stoneLines.length > 0) {
+      totalPieces = trip.stoneLines.reduce((s, l) => s + (Number(l.pieces) || 0), 0);
+    } else if (Array.isArray(trip.stops) && trip.stops.length > 0) {
+      totalPieces = trip.stops.reduce((s, st) => s + (Number(st.totalPieces) || 0), 0);
+    }
+
+    let deliveredPieces = 0;
+    let damagedPieces = 0;
+    if (Array.isArray(trip.unloadingEntries) && trip.unloadingEntries.length > 0) {
+      deliveredPieces = trip.unloadingEntries.reduce((s, e) => s + (Number(e.piecesDelivered) || 0), 0);
+      damagedPieces = trip.unloadingEntries.reduce((s, e) => s + (Number(e.piecesDamaged) || 0), 0);
+    } else {
+      deliveredPieces = totalPieces;
+    }
+
+    const audit = trip.finalAudit || {};
+    const grossRevenue = audit.totalGrossRevenue || audit.stoneRevenue || 0;
+    const totalExpenses = audit.totalTripExpenses || 0;
+    const netProfit = audit.netTripProfit || (grossRevenue - totalExpenses);
+    const driverCashCollected = audit.driverCashCollected || 0;
+    const driverCashHandedToOwner = audit.driverCashHandedToOwner || 0;
+
+    // --- Dispatch to Driver ---
+    let driverResult = { sent: false, reason: 'Driver phone not found or not assigned' };
+    if (driver && driver.phone) {
+      const driverCaption = (
+`🏁 *TRANSIA TRANSPORT — TRIP COMPLETED & AUDITED*
+
+Hello *${driver.name}*, your trip *${tripCode}* has ended.
+Attached is the official Master Trip Manifest & Settlement Summary PDF for your records.
+
+📋 *Trip Code:* ${tripCode}
+🚛 *Vehicle Plate:* *${lorryPlate}*
+📅 *Date:* ${date}
+📍 *Loading Point:* ${origin}
+📦 *Delivered Consignment:* ${deliveredPieces} pcs ${damagedPieces > 0 ? `(${damagedPieces} damaged)` : ''}
+${driverCashCollected > 0 ? `💵 *Cash Collected at Stops:* ₹${driverCashCollected.toLocaleString('en-IN')}\n` : ''}${driverCashHandedToOwner > 0 ? `🤝 *Cash Handed to Owner:* ₹${driverCashHandedToOwner.toLocaleString('en-IN')}\n` : ''}
+📄 *Official Trip PDF Document:*
+👉 Direct Download: ${manifest.downloadUrl}
+
+Thank you for your service! Drive safe.
+_Transia Stone Transport Fleet Operations_`
+      );
+
+      console.log(`[WhatsApp Service] Sending Trip Ended PDF to Driver ${driver.name} (${driver.phone})...`);
+      driverResult = await this.sendDocumentMessage(
+        driver.phone,
+        manifest.publicUrl,
+        manifest.filename,
+        driverCaption,
+        manifest.buffer
+      );
+    }
+
+    // --- Dispatch to Owner ---
+    let ownerResult = { sent: false, reason: 'Owner phone not configured' };
+    if (normalizedOwnerPhone) {
+      const ownerCaption = (
+`🏁 *TRANSIA TRANSPORT — TRIP ENDED & SETTLED (OWNER COPY)*
+
+Hello *${owner?.name || 'Owner'}*, Trip *${tripCode}* has successfully ended and been reconciled.
+Attached is the complete Master Trip Manifest & Financial Settlement PDF document.
+
+📋 *Trip Ref:* ${tripCode}
+🚛 *Vehicle Registration:* *${lorryPlate}*
+👨‍✈️ *Driver:* ${driver?.name || 'Assigned Driver'} (${driver?.phone || 'N/A'})
+📅 *Trip Date:* ${date}
+📍 *Origin:* ${origin}
+📦 *Stones Delivered:* ${deliveredPieces} / ${totalPieces} pcs ${damagedPieces > 0 ? `(${damagedPieces} damaged)` : ''}
+${grossRevenue > 0 ? `💰 *Gross Revenue:* ₹${grossRevenue.toLocaleString('en-IN')}\n` : ''}${totalExpenses > 0 ? `⛽ *Total Trip Expenses:* ₹${totalExpenses.toLocaleString('en-IN')}\n` : ''}${netProfit > 0 ? `📈 *Net Trip Profit:* ₹${netProfit.toLocaleString('en-IN')}\n` : ''}${driverCashHandedToOwner > 0 ? `🤝 *Cash Received from Driver:* ₹${driverCashHandedToOwner.toLocaleString('en-IN')}\n` : ''}
+📄 *Official Trip Master PDF Document:*
+👉 Direct Download: ${manifest.downloadUrl}
+
+_Transia Logistics Fleet Management_`
+      );
+
+      console.log(`[WhatsApp Service] Sending Trip Ended PDF to Owner (${normalizedOwnerPhone})...`);
+      ownerResult = await this.sendDocumentMessage(
+        normalizedOwnerPhone,
+        manifest.publicUrl,
+        manifest.filename,
+        ownerCaption,
+        manifest.buffer
+      );
+    }
+
+    return {
+      success: (driverResult.success || driverResult.sent || false) || (ownerResult.success || ownerResult.sent || false),
+      tripId: trip.id,
+      tripCode,
+      manifestUrl: manifest.publicUrl,
+      downloadUrl: manifest.downloadUrl,
+      driverResult,
+      ownerResult
+    };
+  },
+
+  /**
+   * Send WhatsApp notification to Driver when an order is dispatched or assigned directly.
+   * @param {Object|string} orderOrId 
+   */
+  async sendDriverOrderNotification(orderOrId) {
+    let order = orderOrId;
+    if (typeof orderOrId === 'string') {
+      order = await Order.findOne({ id: orderOrId });
+    }
+    if (!order) return { success: false, reason: 'Order not found' };
+
+    const driverId = order.driverId;
+    if (!driverId) return { success: false, reason: 'No driver assigned to order' };
+
+    const driver = await User.findOne({
+      role: 'driver',
+      $or: [
+        { 'driverProfile.id': driverId },
+        { _id: mongoose.isValidObjectId(driverId) ? driverId : null },
+        { username: driverId }
+      ].filter(Boolean)
+    }) || await Driver.findOne({ id: driverId });
+
+    if (!driver || !driver.phone) return { success: false, reason: 'Driver phone not found' };
+
+    const normalizedPhone = normalizePhoneNumber(driver.phone);
+    if (!normalizedPhone) return { success: false, reason: 'Invalid driver phone' };
+
+    let buyer = await User.findOne({
+      role: 'buyer',
+      $or: [
+        { 'buyerProfile.id': order.unloadingPartyId },
+        { username: order.unloadingPartyId }
+      ]
+    }) || await UnloadingParty.findOne({ id: order.unloadingPartyId });
+
+    const buyerName = buyer?.name || order.unloadingPartyId || 'Kerala Customer';
+    const buyerPhone = buyer?.phone || 'N/A';
+    const district = order.district || buyer?.district || 'Kerala';
+    const lorryPlate = order.lorryPlate || 'Assigned Lorry';
+
+    let stoneDetailsText = 'Standard Stone Consignment';
+    let totalPieces = 0;
+    let totalSqft = 0;
+    if (Array.isArray(order.lines) && order.lines.length > 0) {
+      stoneDetailsText = order.lines.map((l, idx) => {
+        const sqftPerPc = Number(l.sqftPerPiece) || 4;
+        const lineSqft = (Number(l.pieces) || 0) * sqftPerPc;
+        totalPieces += Number(l.pieces) || 0;
+        totalSqft += lineSqft;
+        return `   ${idx + 1}. *${l.size}* (${l.thickness || '30mm'} ${l.finish || ''}) — *${l.pieces} pcs* (${lineSqft} sq.ft)`;
+      }).join('\n');
+    }
+
+    const messageText = (
+`🚚 *TRANSIA TRANSPORT — ORDER DISPATCH ASSIGNED TO YOU*
+
+Hello *${driver.name}*, a new stone delivery order has been assigned to you.
+
+📋 *Order Reference:* ${order.code}
+🚛 *Assigned Vehicle:* *${lorryPlate}*
+📍 *Delivery Destination:* *${buyerName}*
+   District: *${district}, Kerala*
+📞 *Customer Mobile:* *${buyerPhone}*
+
+📦 *Stone Consignment to Deliver:*
+${stoneDetailsText}
+📊 *Total Load:* ${totalPieces} pcs ${totalSqft > 0 ? `(${totalSqft.toFixed(1)} sq.ft)` : ''}
+
+⚠️ *Driver Instructions:*
+- Inspect stone count & condition before departing loading yard.
+- Contact customer 30 minutes before arrival at site.
+- Drive safe!
+
+_Transia Stone Transport Logistics Management_`
+    );
+
+    return await this.sendDirectMessage(normalizedPhone, messageText);
+  },
+
+  /**
+   * Send WhatsApp notification to Kerala party (buyer) when order is dispatched or driver/lorry assigned.
+   * @param {Object|string} orderOrId 
+   */
+  async sendBuyerOrderNotification(orderOrId) {
+    let order = orderOrId;
+    if (typeof orderOrId === 'string') {
+      order = await Order.findOne({ id: orderOrId });
+    }
+    if (!order) return { success: false, reason: 'Order not found' };
+
+    let buyer = await User.findOne({
+      role: 'buyer',
+      $or: [
+        { 'buyerProfile.id': order.unloadingPartyId },
+        { username: order.unloadingPartyId }
+      ]
+    }) || await UnloadingParty.findOne({ id: order.unloadingPartyId });
+
+    if (!buyer || !buyer.phone) return { success: false, reason: 'Buyer phone not found' };
+
+    const normalizedPhone = normalizePhoneNumber(buyer.phone);
+    if (!normalizedPhone) return { success: false, reason: 'Invalid buyer phone' };
+
+    let driver = null;
+    if (order.driverId) {
+      driver = await User.findOne({
+        role: 'driver',
+        $or: [
+          { 'driverProfile.id': order.driverId },
+          { _id: mongoose.isValidObjectId(order.driverId) ? order.driverId : null },
+          { username: order.driverId }
+        ].filter(Boolean)
+      }) || await Driver.findOne({ id: order.driverId });
+    }
+
+    const driverName = driver?.name || 'Assigned Driver';
+    const driverPhone = driver?.phone || 'Driver will contact upon arrival';
+    const lorryPlate = order.lorryPlate || 'Assigned Lorry';
+    const district = order.district || buyer?.district || 'Kerala';
+
+    let stoneDetailsText = 'Stone Consignment';
+    let totalPieces = 0;
+    let totalSqft = 0;
+    let totalEstimatedValue = 0;
+    if (Array.isArray(order.lines) && order.lines.length > 0) {
+      stoneDetailsText = order.lines.map((l, idx) => {
+        const sqftPerPc = Number(l.sqftPerPiece) || 4;
+        const lineSqft = (Number(l.pieces) || 0) * sqftPerPc;
+        const rate = Number(l.ratePerSqft) || 40;
+        const amt = lineSqft * rate;
+        totalPieces += Number(l.pieces) || 0;
+        totalSqft += lineSqft;
+        totalEstimatedValue += amt;
+        return `   ${idx + 1}. *${l.size}* (${l.thickness || '30mm'} ${l.finish || ''}) — *${l.pieces} pcs* (${lineSqft} sq.ft)`;
+      }).join('\n');
+    }
+
+    const messageText = (
+`🚚 *TRANSIA TRANSPORT — ORDER DISPATCHED & VEHICLE ASSIGNED*
+
+Hello *${buyer.name || 'Valued Customer'}*! Your stone order is dispatched and on route:
+
+📋 *Order Code:* ${order.code}
+📅 *Date:* ${order.placedAt || new Date().toISOString().slice(0, 10)}
+🏁 *Destination:* ${district}, Kerala
+
+🚛 *Assigned Vehicle:* *${lorryPlate}*
+👨‍✈️ *Assigned Driver:* *${driverName}*
+📞 *Driver Contact:* *${driverPhone}*
+_(You can call driver directly for live coordinates and arrival time)_
+
+📦 *Consignment Breakdown:*
+${stoneDetailsText}
+📊 *Total Pieces:* ${totalPieces} pcs | ${totalSqft.toFixed(1)} sq.ft
+${totalEstimatedValue > 0 ? `💰 *Amount Due at Delivery:* ₹${totalEstimatedValue.toLocaleString('en-IN')}\n` : ''}
+⚠️ *Unloading Instructions:*
+- Driver will contact you 30 minutes before reaching your location.
+- Please ensure site road access and an unloading team are ready.
+
+Thank you for choosing Transia Stone Transport!
+_Kerala Quarry Direct Transit · Transia Logistics_`
+    );
+
+    return await this.sendDirectMessage(normalizedPhone, messageText);
   }
 };
 

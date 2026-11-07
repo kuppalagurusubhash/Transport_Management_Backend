@@ -1,10 +1,14 @@
 import jwt from 'jsonwebtoken';
 import { User } from '../models/User.js';
 
-const JWT_SECRET = process.env.JWT_ACCESS_SECRET || 'supersecretaccesskey';
+const JWT_SECRET = process.env.JWT_ACCESS_SECRET || (process.env.NODE_ENV !== 'production' ? 'supersecretaccesskey' : null);
 
 export const authenticate = async (req, res, next) => {
   try {
+    if (!JWT_SECRET) {
+      return res.status(500).json({ success: false, message: 'Server authentication configuration missing (JWT_ACCESS_SECRET)' });
+    }
+
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
       return res.status(401).json({ success: false, message: 'Authentication token required (Bearer <token>)' });
@@ -19,19 +23,23 @@ export const authenticate = async (req, res, next) => {
 
     let user = null;
     try {
-      user = await User.findById(decoded.id).maxTimeMS(1000);
+      user = await User.findById(decoded.id).maxTimeMS(2000);
     } catch (e) {}
 
     if (!user) {
-      user = {
-        _id: decoded.id,
-        id: decoded.id,
-        username: decoded.role === 'owner' ? 'subhash.cropnow@gmail.com' : decoded.role,
-        name: decoded.role === 'owner' ? 'Subhash Owner' : (decoded.role === 'driver' ? 'Suresh Kumar' : 'Supervisor'),
-        role: decoded.role,
-        buyerRef: decoded.buyerRef,
-        driverRef: decoded.driverRef
-      };
+      if (process.env.NODE_ENV !== 'production') {
+        user = {
+          _id: decoded.id,
+          id: decoded.id,
+          username: decoded.role === 'owner' ? (process.env.DEFAULT_OWNER_EMAIL || 'owner@transia.com') : decoded.role,
+          name: decoded.role === 'owner' ? (process.env.DEFAULT_OWNER_NAME || 'Owner') : (decoded.role === 'driver' ? 'Driver' : 'Supervisor'),
+          role: decoded.role,
+          buyerRef: decoded.buyerRef,
+          driverRef: decoded.driverRef
+        };
+      } else {
+        return res.status(401).json({ success: false, message: 'User account not found or deactivated' });
+      }
     }
 
     req.user = user;

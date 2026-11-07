@@ -13,8 +13,14 @@ try {
   // Ignore if not supported
 }
 
-const OWNER_EMAIL = 'subhash.cropnow@gmail.com';
-const OWNER_PASSWORD = '12345';
+const OWNER_EMAIL = process.env.DEFAULT_OWNER_EMAIL || process.env.OWNER_EMAIL;
+const OWNER_PASSWORD = process.env.DEFAULT_OWNER_PASSWORD || process.env.OWNER_PASSWORD;
+const OWNER_NAME = process.env.DEFAULT_OWNER_NAME || 'Owner';
+
+if (!OWNER_EMAIL || !OWNER_PASSWORD) {
+  console.error('Error: DEFAULT_OWNER_EMAIL and DEFAULT_OWNER_PASSWORD must be configured in .env to run clearDb.');
+  process.exit(1);
+}
 
 export const defaultStoneRates = [
   { id: 'sp1', size: '2x2', thickness: '30mm', finish: 'rough', ratePerSqft: 17 },
@@ -110,7 +116,7 @@ async function clearAndSetupDatabase() {
       username: OWNER_EMAIL,
       password: OWNER_PASSWORD,
       role: 'owner',
-      name: 'Subhash'
+      name: OWNER_NAME
     });
     await owner.save();
     console.log('✓ Successfully created owner user.');

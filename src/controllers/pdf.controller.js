@@ -77,3 +77,14 @@ export const sendBuyerEwayBillToWhatsApp = async (req, res, next) => {
     next(err);
   }
 };
+
+export const sendTripCompletionPDFToDriverAndOwner = async (req, res, next) => {
+  try {
+    const { id, tripId } = req.params;
+    const targetId = id || tripId;
+    const result = await whatsappService.sendTripEndedReportToDriverAndOwner(targetId);
+    res.status(200).json(result);
+  } catch (err) {
+    next(err);
+  }
+};
