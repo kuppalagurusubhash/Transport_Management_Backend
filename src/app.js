@@ -34,6 +34,9 @@ if (process.env.NODE_ENV === 'production') {
 app.use(express.json());
 app.use(requestLogger);
 
+// Healthcheck route for Docker / monitoring
+app.get('/health', (req, res) => res.status(200).json({ status: 'ok', timestamp: new Date().toISOString() }));
+
 // Serve generated PDF documents statically
 app.use('/documents', express.static(path.join(__dirname, '../public/documents')));
 
