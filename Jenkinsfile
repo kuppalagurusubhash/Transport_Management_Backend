@@ -17,7 +17,7 @@ pipeline {
       steps {
         git branch: 'dev_s',
             credentialsId: 'github-token',
-            url: 'https://github.com/kuppalagurusubhash/Transport_Backend.git'
+            url: 'https://github.com/kuppalagurusubhash/Transport_Management_Backend.git'
       }
     }
     stage('Build Docker Image') {
