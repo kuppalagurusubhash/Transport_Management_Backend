@@ -15,7 +15,7 @@ pipeline {
   stages {
     stage('Checkout') {
       steps {
-        git branch: 'dev_s',
+        git branch: 'main',
             credentialsId: 'github-token',
             url: 'https://github.com/kuppalagurusubhash/Transport_Management_Backend.git'
       }
