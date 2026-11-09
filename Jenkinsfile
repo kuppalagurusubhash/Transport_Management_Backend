@@ -1,11 +1,11 @@
 pipeline {
   agent any
   environment {
-    IMAGE_NAME = "cropnow/akashbhumi-backend"
+    IMAGE_NAME = "backend"
     VM_USER   = "azureuser"
-    VM_IP     = "YOUR_VM_IP"
-    APP_NAME  = "akashbhumi-backend"
-    PORT      = "5000"
+    VM_IP     = "172.198.161.164"
+    APP_NAME  = "transport-backend"
+    PORT      = "9090"
     IMAGE_TAG = "${BUILD_NUMBER}"
   }
   options {
@@ -17,7 +17,7 @@ pipeline {
       steps {
         git branch: 'dev_s',
             credentialsId: 'github-token',
-            url: 'https://github.com/CropNow/AkashBhumi_O3_Backend.git'
+            url: 'https://github.com/kuppalagurusubhash/Transport_Backend.git'
       }
     }
     stage('Build Docker Image') {
@@ -54,7 +54,7 @@ pipeline {
             docker run -d \
               --name $APP_NAME \
               --env-file /home/azureuser/backend.env \
-              -p 5000:5000 \
+              -p 9090:9090 \
               --restart unless-stopped \
               $IMAGE_NAME:$IMAGE_TAG
           '
