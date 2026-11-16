@@ -1,0 +1,48 @@
+# Render Blueprint - free HTTPS hosting for the backend
+# Docs: https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: transport-management-backend
+    runtime: node
+    plan: free
+    region: singapore
+    branch: main
+    buildCommand: npm ci --omit=dev
+    startCommand: node src/server.js
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_ACCESS_EXPIRY
+        value: 15m
+      - key: JWT_ACCESS_SECRET
+        generateValue: true
+      - key: JWT_REFRESH_SECRET
+        generateValue: true
+      # Fill these in on the Render dashboard (sync: false = you'll be prompted)
+      - key: MONGODB_URI
+        sync: false
+      - key: FRONTEND_URL
+        sync: false
+      - key: DEFAULT_OWNER_EMAIL
+        sync: false
+      - key: DEFAULT_OWNER_PASSWORD
+        sync: false
+      - key: DEFAULT_OWNER_NAME
+        sync: false
+      - key: CATALOG_URL
+        sync: false
+      - key: WHATSAPP_PROVIDER
+        value: ultramsg
+      - key: DEFAULT_COUNTRY_CODE
+        value: "+91"
+      - key: ULTRAMSG_INSTANCE_ID
+        sync: false
+      - key: ULTRAMSG_TOKEN
+        sync: false
+      - key: OWNER_ALERT_PHONE
+        sync: false
+      - key: API_BASE_URL
+        sync: false
+

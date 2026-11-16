@@ -45,10 +45,24 @@ class WhatsAppPollerService {
       // 1. Fetch active chats
       const chatsUrl = `https://api.ultramsg.com/${instanceId}/chats?token=${token}`;
       const chatsRes = await fetch(chatsUrl);
-      if (!chatsRes.ok) return;
+      if (!chatsRes.ok) {
+        if (!this._loggedHttpErr) {
+          console.error(`[WhatsApp Poller] HTTP ${chatsRes.status} from UltraMsg API. Check ULTRAMSG_INSTANCE_ID and ULTRAMSG_TOKEN.`);
+          this._loggedHttpErr = true;
+        }
+        return;
+      }
+      this._loggedHttpErr = false;
 
       const chats = await chatsRes.json();
-      if (!Array.isArray(chats)) return;
+      if (!Array.isArray(chats)) {
+        if (chats && chats.error && !this._loggedApiErr) {
+          console.error(`[WhatsApp Poller] UltraMsg Error:`, chats.error);
+          this._loggedApiErr = true;
+        }
+        return;
+      }
+      this._loggedApiErr = false;
 
       // Filter chats with unread messages from actual contacts
       const unreadChats = chats.filter(c => c && c.unread > 0 && c.id && !c.id.startsWith('0@'));

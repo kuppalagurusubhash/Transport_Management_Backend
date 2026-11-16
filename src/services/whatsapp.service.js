@@ -753,7 +753,7 @@ export const whatsappService = {
     const manifest = await pdfService.generateTripManifestPDF(trip);
     const caption = `🚚 *TRANSIA MASTER TRIP MANIFEST — ${trip.code || trip.id}*\n\nHello *${driver.name}*, here is your official Master Dispatch & Route Manifest PDF for your assigned lorry delivery.\n\nDirect Download Link:\n👉 ${manifest.downloadUrl}`;
 
-    const sendRes = await this.sendDocumentMessage(driver.phone, manifest.publicUrl, manifest.filename, caption);
+    const sendRes = await this.sendDocumentMessage(driver.phone, manifest.publicUrl, manifest.filename, caption, manifest.buffer);
     return {
       success: sendRes.success,
       manifestUrl: manifest.publicUrl,
@@ -801,7 +801,7 @@ export const whatsappService = {
 
         const eway = await pdfService.generateBuyerEwayBillPDF(trip, stop.stopNumber);
         const caption = `📄 *KERALA GOODS TRANSPORT E-WAY BILL & DELIVERY CHALLAN*\n\nHello *${stop.buyerName || buyer?.name}*, here is your official E-Way Bill and Delivery Challan PDF for your stone consignment (Delivery Stop #${stop.stopNumber}).\n\nDirect Download Link:\n👉 ${eway.downloadUrl}`;
-        const res = await this.sendDocumentMessage(phone, eway.publicUrl, eway.filename, caption);
+        const res = await this.sendDocumentMessage(phone, eway.publicUrl, eway.filename, caption, eway.buffer);
         results.push({
           stopNumber: stop.stopNumber,
           buyerName: stop.buyerName || buyer?.name,
@@ -836,7 +836,7 @@ export const whatsappService = {
     if (!phone) return { success: false, reason: 'Buyer phone not found' };
 
     const caption = `📄 *KERALA GOODS TRANSPORT E-WAY BILL & DELIVERY CHALLAN*\n\nHello *${targetStop?.buyerName || buyer?.name || 'Customer'}*, here is your official E-Way Bill and Delivery Challan PDF for your stone consignment.\n\nDirect Download Link:\n👉 ${eway.downloadUrl}`;
-    const sendRes = await this.sendDocumentMessage(phone, eway.publicUrl, eway.filename, caption);
+    const sendRes = await this.sendDocumentMessage(phone, eway.publicUrl, eway.filename, caption, eway.buffer);
 
     return {
       success: sendRes.success,
