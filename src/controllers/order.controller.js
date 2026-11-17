@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import { Order } from '../models/Order.js';
 import { Notification } from '../models/Notification.js';
 import { notifyOwnerOfNewOrder } from '../services/orderNotification.service.js';
@@ -156,6 +157,56 @@ export const notifyOrderPartiesWhatsApp = async (req, res, next) => {
       message: 'WhatsApp notifications dispatched for order',
       buyerResult,
       driverResult
+    });
+  } catch (err) {
+    next(err);
+  }
+};
+
+/**
+ * Delete a created order by id (or Mongo _id).
+ * Owners can delete any order; buyers can only delete their own un-dispatched orders.
+ */
+export const deleteOrder = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+    const query = mongoose.isValidObjectId(id)
+      ? { $or: [{ id }, { _id: id }] }
+      : { id };
+
+    const order = await Order.findOne(query);
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found' });
+    }
+
+    if (req.user?.role === 'buyer') {
+      if (order.unloadingPartyId !== req.user.buyerRef) {
+        return res.status(403).json({
+          success: false,
+          message: 'Access denied: You can only delete your own orders.'
+        });
+      }
+
+      if (order.tripId || !['draft', 'placed', 'cancelled'].includes(order.status)) {
+        return res.status(400).json({
+          success: false,
+          message: `Cannot delete order with status '${order.status}'. Only draft, placed, or cancelled orders can be deleted.`
+        });
+      }
+    }
+
+    await Order.deleteOne({ _id: order._id });
+
+    if (order.unloadingPartyId) {
+      buyerLedgerService.calculateBuyerLedger(order.unloadingPartyId).catch(err => {
+        console.warn('[Order Controller] Ledger sync error on order deletion:', err.message);
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: 'Order deleted successfully',
+      data: order
     });
   } catch (err) {
     next(err);
