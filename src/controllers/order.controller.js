@@ -197,6 +197,22 @@ export const deleteOrder = async (req, res, next) => {
 
     await Order.deleteOne({ _id: order._id });
 
+    // Detach from any trips referencing this order
+    try {
+      const Trip = mongoose.models.Trip || mongoose.model('Trip');
+      if (Trip) {
+        await Trip.updateMany(
+          { $or: [{ orderId: order.id }, { orderIds: order.id }] },
+          { 
+            $pull: { orderIds: order.id, dropStops: { orderId: order.id } },
+            $unset: { ...(order.id ? { orderId: 1 } : {}) }
+          }
+        );
+      }
+    } catch (tripErr) {
+      console.warn('[Order Controller] Trip detach notice on order deletion:', tripErr.message);
+    }
+
     if (order.unloadingPartyId) {
       buyerLedgerService.calculateBuyerLedger(order.unloadingPartyId).catch(err => {
         console.warn('[Order Controller] Ledger sync error on order deletion:', err.message);

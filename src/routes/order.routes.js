@@ -8,6 +8,6 @@ router.get('/', authenticate, requireRole(['owner', 'loading_supervisor', 'buyer
 router.post('/', authenticate, requireRole(['owner', 'buyer']), createOrder);
 router.put('/:id/status', authenticate, requireRole(['owner', 'loading_supervisor', 'buyer']), updateOrderStatus);
 router.post('/:id/notify-whatsapp', authenticate, requireRole(['owner', 'loading_supervisor']), notifyOrderPartiesWhatsApp);
-router.delete('/:id', authenticate, requireRole(['owner', 'buyer']), deleteOrder);
+router.delete('/:id', authenticate, requireRole(['owner', 'loading_supervisor', 'buyer']), deleteOrder);
 
 export default router;
